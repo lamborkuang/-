@@ -1,0 +1,462 @@
+--------------------------------基本配置-------------------------------------
+配置settings.py
+
+#将app放进apps文件夹内需写这个
+sys.path.insert(0, os.path.join(BASE_DIR, 'apps'))
+
+INSTALLED_APPS = [
+    'django.contrib.admin',
+    'django.contrib.auth',
+    'django.contrib.contenttypes',
+    'django.contrib.sessions',
+    'django.contrib.messages',
+    'django.contrib.staticfiles',
+    'tinymce',
+    'user',
+    'goods',
+    'cart',
+    'order',
+]
+
+# django认证系统使用的模型类, 替换默认模型类，　生成表是不再生成auth_user表，
+# 生成迁移文件之前不指定会报错   models.py里面的类需指定 db_table = 'df_xxx'
+AUTH_USER_MODEL='user.User'
+
+# tinymce 富文本类型 这个要写下面的
+YINYMCE_DEFAULT_CONFIG = {
+    'theme':'advanced',
+    'width':600,
+    'height':400,
+}
+
+# models.py 导入富文本类型:带有格式的文本
+from tinymce.models import HTMLField
+
+
+# base_model.py    要设置　abstract = True
+class BaseModel(models.Model):
+    '''模型抽象基类'''
+    create_time = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
+    update_time = models.DateTimeField(auto_now=True, verbose_name='更新时间')
+    is_delete = models.BooleanField(default=False, verbose_name='删除标记')
+
+    class Meta:
+        # 说明是一个抽象模型类
+        abstract = True
+
+
+--------------------------------注册-------------------------------------
+# settings.py
+
+STATICFILES_DIRS = os.path.join(BASE_DIR, 'static')   # 这个是错误的
+STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
+
+
+# 类视图
+
+from django.views.generic import View
+# views.py RegisterView
+class RegisterView(View):
+    def get(self, request):
+        return render(request, 'register.html')
+
+    def post(self, request):
+        ...............
+        return render(request, 'xxxxxxxx.html')
+
+# urls.py
+url(r'^register$', RegisterView.as_view(), name='register'),
+url(r'^login$', LoginView.as_view(), name='login'),
+url(r'^active/(?P<token>.*)$', ActiveView.as_view(), name='active'),
+
+# 邮箱验证
+# 加密处理的
+from itsdangerous import TimedJSONWebSignatureSerializer as Serializer
+from itsdangerous import SignatureExpired
+from django.conf import settings
+# 发送邮件
+from celery_tasks.tasks import send_register_active_email
+from django.core.mail import send_mail
+
+# views.py  RegisterView
+# 加密用户的身份信息，生成激活token
+serializer = Serializer(settings.SECRET_KEY, 3600)
+info = {'confirm':user.id}
+token = serializer.dumps(info)   # bytes
+token = token.decode()
+
+
+
+# 激活 ActiveView
+    def get(self, request, token):
+        serializer = Serializer(settings.SECRET_KEY, 3600)
+        try:
+            info = serializer.loads(token)
+            user_id = info['confirm']
+            user = User.objects.get(id=user_id)
+            user.is_active = 1
+            user.save()
+            return redirect(reverse('user:login'))
+        except SignatureExpired as e:
+            return HttpResponse(e, '激活链接已过期')
+
+# 发送邮件激活链接　跳转到激活页面
+        subject = '天天生鲜欢迎信息'
+        # message = '<h1>%s, 欢迎您成为天天生鲜注册会员</h1>请点击以下链接激活您的账户<br><a href="http://127.0.0.1:8888/user/active/%s">http://127.0.0.1:8888/user/active/%s</a>'%(user, token, token)
+        message = ''
+        sender = settings.EMAIL_FROM
+        receiver = [email]
+        html_message = '<h1>%s, 欢迎您成为天天生鲜注册会员</h1>请点击以下链接激活您的账户<br><a href="http://127.0.0.1:8888/user/active/%s">http://127.0.0.1:8888/user/active/%s</a>'%(user, token, token)
+        #         标题　　　　　　内容　　　　　　发送者　　　　　　接受人　　　　html内容
+        send_mail(subject, message, sender, receiver, html_message=html_message)
+
+
+
+# tasks.py
+初始化
+# 在任务处理者端加这几句 
+import os
+import django
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "dailyfresh.settings")
+django.setup()
+
+# redis 　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　ip　　　　　　　　第几个数据库
+app = Celery('celery_tasks.tasks', broker='redis://127.0.0.1:6379/8')
+
+@app.task
+def send_register_active_email(to_email, username, token):
+    subject = '天天生鲜欢迎信息'
+    message = ''
+    sender = settings.EMAIL_FROM
+    receiver = [to_email]
+    html_message = '<h1>%s, 欢迎您成为天天生鲜注册会员</h1>请点击以下链接激活您的账户<br><a href="http://127.0.0.1:8888/user/active/%s">http://127.0.0.1:8888/user/active/%s</a>'%(username, token, token)
+    #         标题　　　　　　内容　　　　　　发送者　　　　　　接受人　　　　html内容
+    send_mail(subject, message, sender, receiver, html_message=html_message)
+
+    time.sleep(5)
+
+虚拟环境启动　celery
+celery -A celery_tasks.tasks worker -l info
+
+
+
+
+django  session的信息默认保存在数据库里，需改为redis存储     　
+
+# Django的缓存配置
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": "redis://127.0.0.1:6379/9",
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        }
+    }
+}
+
+# 配置session存储    改为redis存储   
+SESSION_ENGINE = "django.contrib.sessions.backends.cache"
+SESSION_CACHE_ALIAS = "default"
+
+# login.html 
+# 不设置表单action 提交表单向浏览器地址栏中地址
+<form method="post">
+
+# 页面登录验证  没有登录会默认附带　/accounts/login/?next=/user/　　需要在settings配置
+# urls.py
+from django.contrib.auth.decorators import login_required
+
+url(r'^$', login_required(UserInfoView.as_view()), name='user'), # 用户中心-信息页
+url(r'^order$', login_required(UserOrderView.as_view()), name='order'), # 用户中心-订单页
+url(r'^address$', login_required(AddressView.as_view()), name='address'), # 用户中心-地址页
+
+# settings.py
+# 配置登录url地址   
+#　设置以后用户未登录时浏览器地址栏变成　http://127.0.0.1:8888/user/login?next=/user/
+# 登录以后没有清除cookies则只有　http://127.0.0.1:8888/user/login 登录会跳转到index
+# 因为在login类的post函数里面有以下语句　　               没有取到next则跳转到index 
+# next_url = request.GET.get('next', reverse('goods:index'))
+LOGIN_URL='/user/login'     # 替换默认的　/accounts/login
+
+# 最终要实现的效果是---->  login_required(UserInfoView.as_view())
+class UserInfoView(LoginRequiredMixin, View):
+
+# 所以　super(LoginRequiredMixin, cls) 相当于---->  UserInfoView
+class LoginRequiredMixin(object):
+    @classmethod
+    def as_view(cls, **initkwargs):
+        # 调用父类的as_view
+        view = super(LoginRequiredMixin, cls).as_view(**initkwargs)
+        return login_required(view)
+
+
+
+# Django会给request对象添加一个属性request.user
+# 如果用户未登录->user是AnonymousUser类的一个实例对象
+# 如果用户登录->user是User类的一个实例对象
+# request.user.is_authenticated()
+# 除了你给模板文件传递的模板变量之外，django框架会把request.user也传给模板文件
+
+
+from django.contrib.auth import authenticate, login, logout 
+class LogoutView(View):
+    def get(self, request):
+        logout(request)
+        return redirect(reverse('goods:index'))
+
+
+
+
+
+
+# safe 关闭转义
+ <dd>{{ sku.goods.detail|safe }}</dd>
+
+{% autoescape off %}
+{% endautoescape %}
+
+
+url(r'^goods/(?P<goods_id>\d+)$', DetailView.as_view(), name='detail'), # 详情页
+# 页面发起请求时会加上goods/  那样获取不到图片 因为图片上传时候路径为static/images/xxx
+GET /goods/static/images/goods/goods020.jpg HTTP/1.1" 404 2838
+
+
+
+
+------------------------------------------------------------
+在终端或pycharm里，安装django-haystack
+pip install django-haystack==2.6.0
+
+解决办法：
+安装django-haystack之前，先安装setuptools
+pip install setuptools-scm
+再执行安装django-haystack的操作。
+
+如果以上方法还会报错，可以安装certifi，解决问题
+pip install certifi==2017.7.27.1
+
+# 在templates 文件夹下的search 下的indexes 下建立 apps 对应名字的文件夹如　goods
+# 再建立一个类的小写名字的txt文件（_text.txt为固定的） eg:goodssku_text.txt
+
+#        goodssku_text.txt
+# 指定根据表中的哪些字段建立索引数据
+{{object.name}}
+{{object.desc}}
+{{object.goods.detail}}
+
+#            settings.py
+# 全文检索框架的配置
+HAYSTACK_CONNECTIONS = {
+    'default': {
+        # 使用whoosh引擎
+        'ENGINE': 'haystack.backends.whoosh_backend.WhooshEngine',
+        # 'ENGINE': 'haystack.backends.whoosh_cn_backend.WhooshEngine',
+        # 索引文件路径
+        'PATH': os.path.join(BASE_DIR, 'whoosh_index'),
+    }
+}
+
+# 当添加、修改、删除数据时，自动生成索引
+HAYSTACK_SIGNAL_PROCESSOR = 'haystack.signals.RealtimeSignalProcessor'
+
+# 指定搜索结果每页显示的条数
+HAYSTACK_SEARCH_RESULTS_PER_PAGE=3
+
+INSTALLED_APPS = [
+    'tinymce',
+    'haystack',
+]
+
+＃　　　base.html    固定的name="q"
+<form method="get" action="/search">
+    <input type="text" class="input_text fl" name="q" placeholder="搜索商品">
+    <input type="submit" class="input_btn fr" name="" value="搜索">
+</form>
+
+# dailyfresh 下的urls.py　加上
+url(r'^search/', include('haystack.urls')),
+
+# 在templates 文件夹下的search 下的indexes 下建立search.html显示搜索后的结果
+
+
+
+
+# 购物车模块
+
+# 购物车页面显示
+# 前端
+1 商品的全选和全不选
+1) 获取全选的checkbox的选中状态
+2) 遍历商品的对应的checkbox，设置这些checkbox的选中状态和全选的checkbox保持一致
+3) 更新页面的信息 
+
+2 商品对应的checkbox状态发生改变时，设置全选checkbox的状态
+1) 获取页面上所有商品的数目
+2) 获取页面上被选中的商品的数目  checked_len < all_len
+3) 更新页面的信息  update_page_info 
+
+3 计算被选中的商品的总件数和总价格 update_page_info()
+1) 获取所有被选中的商品的checkbox
+2) 获取所有被选中的商品所在的ul元素
+3) 获取商品的数目和小计
+4) 累加计算商品的总件数和总价格
+5) 设置被选中的商品的总件数和总价格
+
+# 后端
+1 获取登录的用户
+2 获取用户购物车中商品的信息redis
+3 保存用户购物车中商品的总数目和总价格
+4 遍历获取商品的信息
+5 根据商品的id获取商品的信息
+6 累加计算商品的总数目和总价格
+
+# 购物车记录添加
+# 前端
+1 获取商品的id和商品的数量  以及csrf = $('input[name="csrfmiddlewaretoken"]').val()
+2 组织参数 点击加１
+3 设置ajax请求为同步
+4 发起ajax post请求，访问/cart/update, 传递参数:sku_id count 默认发起的ajax请求都是异步的，不会等回调函数执行
+5 更新成功 设置（error_update = false） 更新失败 error_update = true
+6 设置ajax请求为异步
+7 判断更新是否成功  error_update = false
+8 重新设置商品的数目
+9 获取商品对应的checkbox的选中状态，如果被选中，更新页面信息
+10 更新页面上购物车商品的总件数
+
+# 后端  ajax发起的请求都在后台，在浏览器中看不到效果 需要is_authenticated验证登录
+1 验证登录
+2 接收数据
+3  数据校验
+4 校验添加的商品数量
+5 校验商品是否存在
+6 业务处理:添加购物车记录
+7 先尝试获取sku_id的值 -> hget cart_key 属性, 如果sku_id在hash中不存在，hget返回None
+8 校验商品的库存
+9 设置hash中sku_id对应的值 hset->如果sku_id已经存在，更新数据， 如果sku_id不存在，添加数据
+10 计算用户购物车商品的条目数
+11 返回应答
+
+# 购物车记录更新
+# 前端
+# 手动输入购物车中的商品数量
+1 获取商品的id和商品的数量
+2 校验参数 isNaN(count) || count.trim().length==0 || parseInt(count)<=0
+3 设置商品的数目为用户输入之前的数目
+4 更新购物车中的记录
+5 判断更新是否成功 error_update == false  否则设置商品的数目为用户输入之前的数目
+6 重新设置商品的数目
+7 计算商品的小计
+8 获取商品对应的checkbox的选中状态，如果被选中，更新页面信息
+9 更新页面上购物车商品的总件数
+
+# 后端
+1 验证登录
+2 接收数据
+3  数据校验
+4 校验添加的商品数量
+5 校验商品是否存在
+6 业务处理:更新购物车记录
+7 校验商品的库存
+8 更新 -> hset 
+9 计算用户购物车中商品的总件数 {'1':5, '2':3}  vals = conn.hvals(cart_key)
+10 返回应答
+
+#  购物车记录删除
+# 前端
+1 获取对应商品的id
+2 组织参数
+3 获取商品所在的ul元素
+4 发起ajax post请求， 访问/cart/delete, 传递参数:sku_id
+5 删除成功，异常页面上商品所在的ul元素
+6 获取sku_ul中商品的选中状态
+7 更新页面信息
+8 重新设置页面上购物车中商品的总件数
+
+# 后端
+1 验证登录
+2 接收数据
+3  数据校验
+4 校验商品是否存在
+5 业务处理:删除购物车记录 删除 hdel
+6 计算用户购物车中商品的总件数 {'1':5, '2':3}
+7 返回应答
+
+
+#  购物车提交
+# 前端
+1 获取用户选择的地址id, 支付方式, 要购买的商品id字符串
+2 发起ajax post请求，访问/order/commit, 传递的参数: addr_id pay_method, sku_ids, csrf
+
+# 后端
+1 验证登录
+2 接收数据
+3 数据校验
+4 校验支付方式
+5 校验地址
+6 创建订单核心业务
+7 订单id: 20171122181630+用户id   datetime.now().strftime('%Y%m%d%H%M%S')+str(user.id)
+# 设置事务保存点
+8 向df_order_info表中添加一条记录
+9 用户的订单中有几个商品，需要向df_order_goods表中加入几条记录
+10 获取商品的信息   # 商品不存在 回滚 transaction.savepoint_rollback(save_id)
+11 从redis中获取用户所要购买的商品的数量
+12 判断商品的库存   # 商品库存不足 回滚 transaction.savepoint_rollback(save_id)
+13 更新商品的库存和销量
+14 累加计算订单商品的总数量和总价格
+15 更新订单信息表中的商品的总数量和总价格
+16 清除用户购物车中对应的记录
+17 返回应答
+
+悲观锁
+# select * from df_goods_sku where id=sku_id for update;
+   sku = GoodsSKU.objects.select_for_update().get(id=sku_id)
+
+乐观锁    查询前需要判断库存和之前有没有变化
+
+ # todo: 更新商品的库存和销量
+                    orgin_stock = sku.stock
+                    new_stock = orgin_stock - int(count)
+                    new_sales = sku.sales + int(count)
+
+# 返回受影响的行数
+                    res = GoodsSKU.objects.filter(id=sku_id, stock=orgin_stock).update(stock=new_stock, sales=new_sales)
+                    if res == 0:
+                        if i == 2:
+                            # 尝试的第3次
+                            transaction.savepoint_rollback(save_id)
+                            return JsonResponse({'res': 7, 'errmsg': '下单失败2'})
+                        continue
+
+# 跳出循环
+                    break
+
+sudo vi /etc/mysql/mysql.conf.d/mysqld.cnf
+
+加上这句                   读取提交内容　    提交后别的才可以读取
+transaction-isolation = READ-COMMITTED
+
+
+
+# (?P<page>\d+)   加上这个添加页面　　查询时候分页显示
+url(r'^order/(?P<page>\d+)', UserOrderView.as_view(), name='order'), # 用户中心-订单页
+
+
+
+商家信息
+商家账号coiaag4442@sandbox.com
+商户UID2088102176481745
+登录密码111111
+账户余额
+0.00充值
+
+
+买家信息
+买家账号jposoh7762@sandbox.com
+登录密码111111
+支付密码111111
+用户名称沙箱环境
+证件类型身份证(IDENTITY_CARD)
+证件号码761743191406084428
+账户余额
+99999.00充值
+
