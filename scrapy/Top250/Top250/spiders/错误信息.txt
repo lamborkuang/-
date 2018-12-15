@@ -1,0 +1,27 @@
+rawl doubanmovie
+2018-09-01 20:58:14 [scrapy] INFO: Scrapy 1.0.3 started (bot: douban)
+2018-09-01 20:58:14 [scrapy] INFO: Optional features available: ssl, http11, boto
+2018-09-01 20:58:14 [scrapy] INFO: Overridden settings: {'NEWSPIDER_MODULE': 'douban.spiders', 'SPIDER_MODULES': ['douban.spiders'], 'USER_AGENT': 'Mozilla/5.0 (Windows; U; Windows NT 5.2) AppleWebKit/525.13 (KHTML, like Gecko) Chrome/0.2.149.27 Safari/525.13', 'DOWNLOAD_DELAY': 2, 'BOT_NAME': 'douban'}
+2018-09-01 20:58:14 [scrapy] INFO: Enabled extensions: CloseSpider, TelnetConsole, LogStats, CoreStats, SpiderState
+2018-09-01 20:58:14 [boto] DEBUG: Retrieving credentials from metadata server.
+2018-09-01 20:58:15 [boto] ERROR: Caught exception reading instance data
+Traceback (most recent call last):
+  File "/usr/lib/python2.7/dist-packages/boto/utils.py", line 210, in retry_url
+    r = opener.open(req, timeout=timeout)
+  File "/usr/lib/python2.7/urllib2.py", line 429, in open
+    response = self._open(req, data)
+  File "/usr/lib/python2.7/urllib2.py", line 447, in _open
+    '_open', req)
+  File "/usr/lib/python2.7/urllib2.py", line 407, in _call_chain
+    result = func(*args)
+  File "/usr/lib/python2.7/urllib2.py", line 1228, in http_open
+    return self.do_open(httplib.HTTPConnection, req)
+  File "/usr/lib/python2.7/urllib2.py", line 1198, in do_open
+    raise URLError(err)
+URLError: <urlopen error timed out>
+2018-09-01 20:58:15 [boto] ERROR: Unable to read instance data, giving up
+2018-09-01 20:58:15 [scrapy] INFO: Enabled downloader middlewares: HttpAuthMiddleware, DownloadTimeoutMiddleware, UserAgentMiddleware, RetryMiddleware, DefaultHeadersMiddleware, MetaRefreshMiddleware, HttpCompressionMiddleware, RedirectMiddleware, CookiesMiddleware, ChunkedTransferMiddleware, DownloaderStats
+2018-09-01 20:58:15 [scrapy] INFO: Enabled spider middlewares: HttpErrorMiddleware, OffsiteMiddleware, RefererMiddleware, UrlLengthMiddleware, DepthMiddleware
+Unhandled error in Deferred:
+2018-09-01 20:58:15 [twisted] CRITICAL: Unhandled error in Deferred:
+2018-09-01 20:58:15 [twisted] CRITICAL: 
